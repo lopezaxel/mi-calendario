@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Check, Trash2, RefreshCw } from 'lucide-react'
+import { Check, Trash2, RefreshCw, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { marcarPagado, eliminarPago } from '@/lib/api'
+import { marcarPagado, eliminarPago, actualizarMonto } from '@/lib/api'
 import type { PagoConRegistro } from '@/types'
 
 const CATEGORIA_LABEL: Record<string, string> = {
@@ -22,8 +22,12 @@ interface Props {
 export function FilaPago({ pago, mes, año, hoy, onActualizar }: Props) {
   const [loadingCheck, setLoadingCheck] = useState(false)
   const [loadingDel, setLoadingDel] = useState(false)
+  const [editandoMonto, setEditandoMonto] = useState(false)
+  const [montoInput, setMontoInput] = useState('')
+  const [loadingMonto, setLoadingMonto] = useState(false)
 
   const pagado = pago.registro?.pagado ?? false
+  const montoDelMes = pago.registro?.monto ?? pago.monto
 
   const ahora = new Date()
   const mesActual = ahora.getMonth() + 1
@@ -51,9 +55,29 @@ export function FilaPago({ pago, mes, año, hoy, onActualizar }: Props) {
     }
   }
 
-  const montoFmt = pago.monto != null
-    ? `${pago.moneda === 'USD' ? 'U$S' : '$'} ${pago.monto.toLocaleString('es-AR')}`
+  function abrirEditorMonto() {
+    setMontoInput(montoDelMes != null ? String(montoDelMes) : '')
+    setEditandoMonto(true)
+  }
+
+  async function guardarMonto() {
+    const valor = montoInput.trim() === '' ? null : parseFloat(montoInput)
+    if (valor !== null && isNaN(valor)) return
+    setLoadingMonto(true)
+    try {
+      await actualizarMonto(pago.id, mes, año, valor)
+      onActualizar()
+    } finally {
+      setLoadingMonto(false)
+      setEditandoMonto(false)
+    }
+  }
+
+  const montoFmt = montoDelMes != null
+    ? `${pago.moneda === 'USD' ? 'U$S' : '$'} ${montoDelMes.toLocaleString('es-AR')}`
     : '—'
+
+  const esMontoVariable = pago.monto === null
 
   return (
     <div
@@ -92,12 +116,55 @@ export function FilaPago({ pago, mes, año, hoy, onActualizar }: Props) {
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-xs text-zinc-500">{CATEGORIA_LABEL[pago.categoria]}</span>
           <span className="text-xs text-zinc-700">·</span>
-          <span className={cn(
-            'text-xs font-mono',
-            pago.moneda === 'USD' ? 'text-emerald-500' : 'text-zinc-400',
-          )}>
-            {montoFmt}
-          </span>
+          {editandoMonto ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                autoFocus
+                className="w-24 bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-xs text-white outline-none focus:border-violet-500"
+                placeholder="monto..."
+                value={montoInput}
+                onChange={(e) => setMontoInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') guardarMonto()
+                  if (e.key === 'Escape') setEditandoMonto(false)
+                }}
+              />
+              <button
+                onClick={guardarMonto}
+                disabled={loadingMonto}
+                className="text-xs text-violet-400 hover:text-violet-300 px-1"
+              >
+                {loadingMonto ? '...' : 'OK'}
+              </button>
+              <button
+                onClick={() => setEditandoMonto(false)}
+                className="text-xs text-zinc-600 hover:text-zinc-400 px-1"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <span className={cn(
+                'text-xs font-mono',
+                pago.moneda === 'USD' ? 'text-emerald-500' : 'text-zinc-400',
+              )}>
+                {montoFmt}
+              </span>
+              {esMontoVariable && (
+                <button
+                  onClick={abrirEditorMonto}
+                  title="Editar monto de este mes"
+                  className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                >
+                  <Pencil size={10} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -201,6 +201,8 @@ export default function App() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreado={cargar}
+        mes={mes}
+        año={año}
       />
     </div>
   )

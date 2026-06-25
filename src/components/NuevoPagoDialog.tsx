@@ -9,6 +9,8 @@ interface Props {
   open: boolean
   onClose: () => void
   onCreado: () => void
+  mes: number
+  año: number
 }
 
 const CATEGORIAS: { value: Categoria; label: string }[] = [
@@ -18,7 +20,7 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
   { value: 'otro', label: 'Otro' },
 ]
 
-export function NuevoPagoDialog({ open, onClose, onCreado }: Props) {
+export function NuevoPagoDialog({ open, onClose, onCreado, mes, año }: Props) {
   const [nombre, setNombre] = useState('')
   const [monto, setMonto] = useState('')
   const [moneda, setMoneda] = useState<Moneda>('ARS')
@@ -47,14 +49,18 @@ export function NuevoPagoDialog({ open, onClose, onCreado }: Props) {
     setLoading(true)
     setError('')
     try {
-      await crearPago({
-        nombre: nombre.trim(),
-        monto: monto ? parseFloat(monto) : null,
-        moneda,
-        dia_vencimiento: diaNum,
-        es_recurrente: recurrente,
-        categoria,
-      })
+      await crearPago(
+        {
+          nombre: nombre.trim(),
+          monto: monto ? parseFloat(monto) : null,
+          moneda,
+          dia_vencimiento: diaNum,
+          es_recurrente: recurrente,
+          categoria,
+        },
+        mes,
+        año,
+      )
       reset()
       onCreado()
       onClose()
@@ -84,13 +90,15 @@ export function NuevoPagoDialog({ open, onClose, onCreado }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-sm text-zinc-400">Monto (opcional)</label>
+              <label className="text-sm text-zinc-400">
+                Monto {!recurrente || monto === '' ? '(opcional)' : ''}
+              </label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 className="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-white text-sm outline-none focus:border-zinc-500"
-                placeholder="0.00"
+                placeholder="Dejar vacío si varía"
                 value={monto}
                 onChange={(e) => setMonto(e.target.value)}
               />
@@ -145,6 +153,12 @@ export function NuevoPagoDialog({ open, onClose, onCreado }: Props) {
             />
             <span className="text-sm text-zinc-300">Se repite cada mes</span>
           </label>
+
+          {!recurrente && (
+            <p className="text-xs text-zinc-500 -mt-2">
+              Este pago solo aparecerá en el mes actual.
+            </p>
+          )}
 
           {error && <p className="text-red-400 text-sm">{error}</p>}
 

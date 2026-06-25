@@ -19,6 +19,7 @@ export interface RegistroPago {
   mes: number
   año: number
   pagado: boolean
+  monto: number | null
   fecha_pago_real: string | null
   created_at: string
 }
