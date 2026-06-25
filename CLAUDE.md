@@ -5,7 +5,7 @@
 - **Estilos:** Tailwind CSS v4 (plugin `@tailwindcss/vite`, sin `tailwind.config.js`)
 - **Componentes:** Shadcn/ui v4 — usa `@base-ui/react` (NO `@radix-ui`)
 - **Backend:** Supabase JS client (`@supabase/supabase-js`)
-- **Deploy:** Vercel (pendiente)
+- **Deploy:** Vercel — `vercel.json` configurado, build OK (`npm run build` → `dist/`)
 
 ## Supabase
 - **Proyecto:** Sistema NIKI
