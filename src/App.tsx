@@ -22,7 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [vista, setVista] = useState<Vista>('lista')
+  const [vista, setVista] = useState<Vista>('calendario')
 
   const cargar = useCallback(async () => {
     setLoading(true)
