@@ -27,3 +27,19 @@ export interface RegistroPago {
 export interface PagoConRegistro extends Pago {
   registro: RegistroPago | null
 }
+
+export interface Evento {
+  id: string
+  titulo: string
+  descripcion: string | null
+  dia: number
+  mes: number | null
+  año: number | null
+  es_recurrente: boolean
+  activo: boolean
+  created_at: string
+}
+
+export type ItemDetalle =
+  | { tipo: 'pago'; item: PagoConRegistro }
+  | { tipo: 'evento'; item: Evento }

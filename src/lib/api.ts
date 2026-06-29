@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Pago, RegistroPago, PagoConRegistro, Categoria, Moneda } from '../types'
+import type { Pago, RegistroPago, PagoConRegistro, Evento, Categoria, Moneda } from '../types'
 
 export async function getPagosDelMes(mes: number, año: number): Promise<PagoConRegistro[]> {
   const { data: pagos, error: pagosError } = await supabase
@@ -125,6 +125,56 @@ export async function actualizarMonto(
 export async function eliminarPago(id: string): Promise<void> {
   const { error } = await supabase
     .from('calendario_pagos')
+    .update({ activo: false })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function getEventosDelMes(mes: number, año: number): Promise<Evento[]> {
+  const { data, error } = await supabase
+    .from('calendario_eventos')
+    .select('*')
+    .eq('activo', true)
+    .order('dia', { ascending: true })
+
+  if (error) throw error
+
+  return (data ?? []).filter((e: Evento) =>
+    e.es_recurrente || (e.mes === mes && e.año === año),
+  )
+}
+
+export async function crearEvento(
+  data: {
+    titulo: string
+    descripcion: string | null
+    dia: number
+    es_recurrente: boolean
+  },
+  mes: number,
+  año: number,
+): Promise<Evento> {
+  const { data: evento, error } = await supabase
+    .from('calendario_eventos')
+    .insert({
+      titulo: data.titulo,
+      descripcion: data.descripcion,
+      dia: data.dia,
+      es_recurrente: data.es_recurrente,
+      mes: data.es_recurrente ? null : mes,
+      año: data.es_recurrente ? null : año,
+      activo: true,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return evento
+}
+
+export async function eliminarEvento(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('calendario_eventos')
     .update({ activo: false })
     .eq('id', id)
   if (error) throw error

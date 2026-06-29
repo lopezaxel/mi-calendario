@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Loader2, List, Grid3x3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Loader2, List, Grid3x3, CalendarPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FilaPago } from '@/components/FilaPago'
 import { CalendarView } from '@/components/CalendarView'
 import { NuevoPagoDialog } from '@/components/NuevoPagoDialog'
-import { getPagosDelMes } from '@/lib/api'
-import type { PagoConRegistro } from '@/types'
+import { NuevoEventoDialog } from '@/components/NuevoEventoDialog'
+import { DetalleModal } from '@/components/DetalleModal'
+import { getPagosDelMes, getEventosDelMes } from '@/lib/api'
+import { cn } from '@/lib/utils'
+import type { PagoConRegistro, Evento, ItemDetalle } from '@/types'
 
 type Vista = 'lista' | 'calendario'
 
@@ -19,17 +22,24 @@ export default function App() {
   const [mes, setMes] = useState(hoy.getMonth() + 1)
   const [año, setAño] = useState(hoy.getFullYear())
   const [pagos, setPagos] = useState<PagoConRegistro[]>([])
+  const [eventos, setEventos] = useState<Evento[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
+  const [eventoDialogOpen, setEventoDialogOpen] = useState(false)
+  const [detalleItem, setDetalleItem] = useState<ItemDetalle | null>(null)
   const [vista, setVista] = useState<Vista>('calendario')
 
   const cargar = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const data = await getPagosDelMes(mes, año)
-      setPagos(data)
+      const [dataPagos, dataEventos] = await Promise.all([
+        getPagosDelMes(mes, año),
+        getEventosDelMes(mes, año),
+      ])
+      setPagos(dataPagos)
+      setEventos(dataEventos)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar')
     } finally {
@@ -55,16 +65,17 @@ export default function App() {
   }
 
   const esMesActual = mes === hoy.getMonth() + 1 && año === hoy.getFullYear()
-
   const pagados = pagos.filter(p => p.registro?.pagado)
   const pendientes = pagos.filter(p => !p.registro?.pagado)
-
   const totalUSD = pendientes.reduce((s, p) => p.moneda === 'USD' && p.monto ? s + p.monto : s, 0)
   const totalARS = pendientes.reduce((s, p) => p.moneda === 'ARS' && p.monto ? s + p.monto : s, 0)
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className={cn(
+        'mx-auto px-4 py-8 transition-all duration-300',
+        vista === 'calendario' ? 'max-w-5xl' : 'max-w-2xl',
+      )}>
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -81,25 +92,34 @@ export default function App() {
             <div className="flex rounded-lg bg-zinc-800 p-0.5">
               <button
                 onClick={() => setVista('lista')}
-                className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
-                  vista === 'lista' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
+                className={cn(
+                  'w-8 h-8 flex items-center justify-center rounded-md transition-colors',
+                  vista === 'lista' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-zinc-300',
+                )}
                 title="Vista lista"
               >
                 <List size={15} />
               </button>
               <button
                 onClick={() => setVista('calendario')}
-                className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
-                  vista === 'calendario' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
+                className={cn(
+                  'w-8 h-8 flex items-center justify-center rounded-md transition-colors',
+                  vista === 'calendario' ? 'bg-zinc-600 text-white' : 'text-zinc-500 hover:text-zinc-300',
+                )}
                 title="Vista calendario"
               >
                 <Grid3x3 size={15} />
               </button>
             </div>
             <Button
-              onClick={() => setDialogOpen(true)}
+              onClick={() => setEventoDialogOpen(true)}
+              className="bg-teal-700 hover:bg-teal-600 text-white gap-2"
+            >
+              <CalendarPlus size={16} />
+              Nuevo evento
+            </Button>
+            <Button
+              onClick={() => setPagoDialogOpen(true)}
               className="bg-violet-600 hover:bg-violet-500 text-white gap-2"
             >
               <Plus size={16} />
@@ -168,7 +188,7 @@ export default function App() {
           <div className="text-center py-16">
             <p className="text-zinc-600 text-sm">No hay pagos este mes.</p>
             <button
-              onClick={() => setDialogOpen(true)}
+              onClick={() => setPagoDialogOpen(true)}
               className="text-violet-400 text-xs mt-2 hover:text-violet-300"
             >
               Agregar el primero
@@ -190,19 +210,34 @@ export default function App() {
         ) : (
           <CalendarView
             pagos={pagos}
+            eventos={eventos}
             mes={mes}
             año={año}
-            onActualizar={cargar}
+            onClickItem={setDetalleItem}
           />
         )}
       </div>
 
       <NuevoPagoDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        open={pagoDialogOpen}
+        onClose={() => setPagoDialogOpen(false)}
         onCreado={cargar}
         mes={mes}
         año={año}
+      />
+      <NuevoEventoDialog
+        open={eventoDialogOpen}
+        onClose={() => setEventoDialogOpen(false)}
+        onCreado={cargar}
+        mes={mes}
+        año={año}
+      />
+      <DetalleModal
+        item={detalleItem}
+        mes={mes}
+        año={año}
+        onClose={() => setDetalleItem(null)}
+        onActualizar={cargar}
       />
     </div>
   )

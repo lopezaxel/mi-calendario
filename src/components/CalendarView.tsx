@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { marcarPagado } from '@/lib/api'
-import type { PagoConRegistro } from '@/types'
+import type { PagoConRegistro, Evento, ItemDetalle } from '@/types'
 
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
@@ -13,70 +12,39 @@ const CATEGORIA_COLOR: Record<string, string> = {
   otro:        'bg-zinc-800      text-zinc-300   border-zinc-700',
 }
 
-interface PildoraPagoProps {
-  pago: PagoConRegistro
-  mes: number
-  año: number
-  esVencido: boolean
-  onActualizar: () => void
+const CATEGORIA_LABEL: Record<string, string> = {
+  suscripcion: 'Suscripción',
+  impuesto: 'Impuesto',
+  servicio: 'Servicio',
+  otro: 'Otro',
 }
 
-function PildoraPago({ pago, mes, año, esVencido, onActualizar }: PildoraPagoProps) {
-  const [loading, setLoading] = useState(false)
-  const pagado = pago.registro?.pagado ?? false
-
-  async function toggle(e: React.MouseEvent) {
-    e.stopPropagation()
-    setLoading(true)
-    try {
-      await marcarPagado(pago.id, mes, año, !pagado)
-      onActualizar()
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      disabled={loading}
-      title={`${pago.nombre} — ${pagado ? 'Marcar pendiente' : 'Marcar pagado'}`}
-      className={cn(
-        'w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-left border transition-opacity text-[10px] leading-tight',
-        pagado
-          ? 'bg-emerald-950/60 text-emerald-500 border-emerald-900/50 opacity-60 line-through'
-          : esVencido
-            ? 'bg-red-950/60 text-red-400 border-red-900/50'
-            : CATEGORIA_COLOR[pago.categoria],
-        loading && 'opacity-40 cursor-wait',
-      )}
-    >
-      {pagado && <Check size={8} className="shrink-0" />}
-      <span className="truncate">{pago.nombre}</span>
-    </button>
-  )
+interface TooltipData {
+  x: number
+  y: number
+  item: ItemDetalle
 }
 
 interface Props {
   pagos: PagoConRegistro[]
+  eventos: Evento[]
   mes: number
   año: number
-  onActualizar: () => void
+  onClickItem: (item: ItemDetalle) => void
 }
 
-export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
+export function CalendarView({ pagos, eventos, mes, año, onClickItem }: Props) {
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null)
+
   const hoy = new Date()
   const diaHoy = hoy.getDate()
   const mesHoy = hoy.getMonth() + 1
   const añoHoy = hoy.getFullYear()
   const esMesActual = mes === mesHoy && año === añoHoy
 
-  // Primer día del mes: getDay() devuelve 0=Dom … 6=Sab
-  // Convertimos a semana lunes-primero: (getDay() + 6) % 7 → 0=Lun … 6=Dom
   const primerDiaSemana = (new Date(año, mes - 1, 1).getDay() + 6) % 7
   const diasEnMes = new Date(año, mes, 0).getDate()
 
-  // Mapa: día → pagos de ese día
   const pagosPorDia = new Map<number, PagoConRegistro[]>()
   for (const pago of pagos) {
     const d = pago.dia_vencimiento
@@ -84,16 +52,26 @@ export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
     pagosPorDia.get(d)!.push(pago)
   }
 
-  // Celdas: vacías al inicio + días del mes
+  const eventosPorDia = new Map<number, Evento[]>()
+  for (const evento of eventos) {
+    const d = evento.dia
+    if (!eventosPorDia.has(d)) eventosPorDia.set(d, [])
+    eventosPorDia.get(d)!.push(evento)
+  }
+
   const totalCeldas = primerDiaSemana + diasEnMes
   const filas = Math.ceil(totalCeldas / 7)
+
+  function showTooltip(e: React.MouseEvent, item: ItemDetalle) {
+    setTooltip({ x: e.clientX, y: e.clientY, item })
+  }
 
   return (
     <div className="select-none">
       {/* Cabecera días de semana */}
       <div className="grid grid-cols-7 mb-1">
         {DIAS_SEMANA.map(d => (
-          <div key={d} className="text-center text-[11px] font-medium text-zinc-600 py-1">
+          <div key={d} className="text-center text-xs font-medium text-zinc-600 py-1">
             {d}
           </div>
         ))}
@@ -106,6 +84,7 @@ export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
           const fuera = dia < 1 || dia > diasEnMes
           const esHoy = esMesActual && dia === diaHoy
           const pagosDia = pagosPorDia.get(dia) ?? []
+          const eventosDia = eventosPorDia.get(dia) ?? []
           const tieneVencido = pagosDia.some(
             p => !p.registro?.pagado && esMesActual && dia < diaHoy,
           )
@@ -114,34 +93,63 @@ export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
             <div
               key={i}
               className={cn(
-                'bg-zinc-950 min-h-[80px] p-1.5 flex flex-col gap-1',
+                'bg-zinc-950 min-h-[120px] p-1.5 flex flex-col gap-1',
                 fuera && 'bg-zinc-950/50',
               )}
             >
               {!fuera && (
                 <>
-                  <span
-                    className={cn(
-                      'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full self-end',
-                      esHoy
-                        ? 'bg-violet-600 text-white'
-                        : tieneVencido
-                          ? 'text-red-400'
-                          : 'text-zinc-500',
-                    )}
-                  >
+                  <span className={cn(
+                    'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full self-end shrink-0',
+                    esHoy
+                      ? 'bg-violet-600 text-white'
+                      : tieneVencido
+                        ? 'text-red-400'
+                        : 'text-zinc-500',
+                  )}>
                     {dia}
                   </span>
-                  {pagosDia.map(pago => (
-                    <PildoraPago
-                      key={pago.id}
-                      pago={pago}
-                      mes={mes}
-                      año={año}
-                      esVencido={esMesActual && dia < diaHoy && !(pago.registro?.pagado)}
-                      onActualizar={onActualizar}
-                    />
-                  ))}
+
+                  {pagosDia.map(pago => {
+                    const pagado = pago.registro?.pagado ?? false
+                    const esVencido = !pagado && esMesActual && dia < diaHoy
+                    const itemDetalle: ItemDetalle = { tipo: 'pago', item: pago }
+                    return (
+                      <button
+                        key={pago.id}
+                        onClick={() => onClickItem(itemDetalle)}
+                        onMouseMove={(e) => showTooltip(e, itemDetalle)}
+                        onMouseLeave={() => setTooltip(null)}
+                        className={cn(
+                          'w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-left border text-xs leading-snug hover:opacity-75 transition-opacity',
+                          pagado
+                            ? 'bg-emerald-950/60 text-emerald-500 border-emerald-900/50 opacity-60 line-through'
+                            : esVencido
+                              ? 'bg-red-950/60 text-red-400 border-red-900/50'
+                              : CATEGORIA_COLOR[pago.categoria],
+                        )}
+                      >
+                        {pagado && <Check size={8} className="shrink-0" />}
+                        <span className="truncate">{pago.nombre}</span>
+                      </button>
+                    )
+                  })}
+
+                  {eventosDia.map(evento => {
+                    const itemDetalle: ItemDetalle = { tipo: 'evento', item: evento }
+                    return (
+                      <button
+                        key={evento.id}
+                        onClick={() => onClickItem(itemDetalle)}
+                        onMouseMove={(e) => showTooltip(e, itemDetalle)}
+                        onMouseLeave={() => setTooltip(null)}
+                        className="w-full flex items-center gap-1 px-1.5 py-0.5 rounded text-left border text-xs leading-snug bg-teal-900/60 text-teal-300 border-teal-800/50 hover:opacity-75 transition-opacity"
+                      >
+                        {evento.es_recurrente && <RefreshCw size={7} className="shrink-0" />}
+                        <span className="truncate">{evento.titulo}</span>
+                      </button>
+                    )
+                  })}
                 </>
               )}
             </div>
@@ -156,6 +164,7 @@ export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
           { label: 'Impuesto',    cls: 'bg-amber-900/60  border-amber-800/50' },
           { label: 'Servicio',    cls: 'bg-blue-900/60   border-blue-800/50' },
           { label: 'Otro',        cls: 'bg-zinc-800      border-zinc-700' },
+          { label: 'Evento',      cls: 'bg-teal-900/60   border-teal-800/50' },
           { label: 'Pagado',      cls: 'bg-emerald-950/60 border-emerald-900/50' },
           { label: 'Vencido',     cls: 'bg-red-950/60    border-red-900/50' },
         ].map(({ label, cls }) => (
@@ -165,6 +174,67 @@ export function CalendarView({ pagos, mes, año, onActualizar }: Props) {
           </span>
         ))}
       </div>
+
+      {/* Tooltip flotante */}
+      {tooltip && (
+        <div
+          style={{ position: 'fixed', left: tooltip.x + 14, top: tooltip.y + 14, zIndex: 9999 }}
+          className="pointer-events-none bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 shadow-2xl max-w-[220px] space-y-1"
+        >
+          {tooltip.item.tipo === 'pago'
+            ? <TooltipPago pago={tooltip.item.item} mes={mes} año={año} />
+            : <TooltipEvento evento={tooltip.item.item} />
+          }
+        </div>
+      )}
     </div>
+  )
+}
+
+function TooltipPago({ pago, mes, año }: { pago: PagoConRegistro; mes: number; año: number }) {
+  const pagado = pago.registro?.pagado ?? false
+  const montoDelMes = pago.registro?.monto ?? pago.monto
+  const montoFmt = montoDelMes != null
+    ? `${pago.moneda === 'USD' ? 'U$S' : '$'} ${montoDelMes.toLocaleString('es-AR')}`
+    : 'Monto variable'
+  const hoy = new Date()
+  const esVencido = !pagado
+    && mes === hoy.getMonth() + 1
+    && año === hoy.getFullYear()
+    && pago.dia_vencimiento < hoy.getDate()
+
+  return (
+    <>
+      <p className="text-xs font-medium text-white">{pago.nombre}</p>
+      <p className={cn(
+        'text-xs font-mono',
+        pago.moneda === 'USD' ? 'text-emerald-400' : 'text-zinc-300',
+      )}>
+        {montoFmt}
+      </p>
+      <p className="text-[11px] text-zinc-400">
+        {CATEGORIA_LABEL[pago.categoria]} · Día {pago.dia_vencimiento}
+      </p>
+      <p className={cn(
+        'text-[11px] font-medium',
+        pagado ? 'text-emerald-400' : esVencido ? 'text-red-400' : 'text-zinc-500',
+      )}>
+        {pagado ? '✓ Pagado' : esVencido ? '⚠ Vencido' : 'Pendiente'}
+      </p>
+    </>
+  )
+}
+
+function TooltipEvento({ evento }: { evento: Evento }) {
+  return (
+    <>
+      <p className="text-xs font-medium text-white">{evento.titulo}</p>
+      {evento.descripcion && (
+        <p className="text-[11px] text-zinc-400 leading-relaxed">{evento.descripcion}</p>
+      )}
+      <p className="text-[11px] text-zinc-500">
+        Día {evento.dia}{evento.es_recurrente ? ' · Mensual' : ''}
+      </p>
+    </>
   )
 }
